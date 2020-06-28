@@ -149,14 +149,14 @@ const resolvers = {
       if (!author) {
         return null
       }
-      console.log(args)
-      console.log('author', author)
+      // console.log(args)
+      // console.log('author', author)
 
       const updatedAuthor = {...author, born: args.setBornTo }
-      console.log('updated', updatedAuthor)
+      // console.log('updated', updatedAuthor)
 
       authors = authors.map(b => b.name === args.name ? updatedAuthor : b)
-      console.log('authors', authors)
+      // console.log('authors', authors)
 
       return updatedAuthor
     }
