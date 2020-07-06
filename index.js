@@ -48,6 +48,7 @@ const typeDefs = gql`
   
   type Token {
     value: String!
+    user: User
   }
 
   type Query {
@@ -90,11 +91,13 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
     allBooks: async (root, args) => {
       const results = await Book.find({})
         .populate('author', { name: 1, born: 1 })
-
       // console.log('results', results)
+      
+      const { genre, author } = args
+
       return results
-        .filter(a => args.genre ? a.genres.indexOf(args.genre) > -1 : a)
-        .filter(b => args.author ? b.author.name === args.author : b)
+        .filter(a => genre ? a.genres.indexOf(genre) > -1 : a)
+        .filter(b => author ? b.author.name === author : b)
     },
     allAuthors: () => {
       return Author.find({})
@@ -216,10 +219,14 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
 
       const userForToken = {
         username: user.username,
+        favoriteGenre: user.favoriteGenre,
         id: user._id
       }
 
-      return { value: jwt.sign(userForToken, JWT_SECRET) }
+      return {
+        value: jwt.sign(userForToken, JWT_SECRET),
+        user
+      }
     }
   }
 }
