@@ -99,17 +99,17 @@ const typeDefs = gql`
 const resolvers = { //todo: revisit with the updated schema and data saved in database
   Query: {
     bookCount: () => {
-      // console.log('bookCount')
+      console.log('bookCount')
       return Book.collection.countDocuments()
     },
     authorCount: () => {
-      // console.log('authorCount')
+      console.log('authorCount')
       return Author.collection.countDocuments()
     },
     allBooks: async (root, args) => {
-      // console.log('allBooks')
+      console.log('allBooks')
       const results = await Book.find({})
-        .populate('author', { name: 1, born: 1 })
+        .populate('author', { name: 1, born: 1, id: 1, bookCount: 1 })
       // console.log('results', results)
       
       const { genre, author } = args
@@ -119,7 +119,7 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
         .filter(b => author ? b.author.name === author : b)
     },
     allAuthors: () => {
-      // console.log('allAuthors')
+      console.log('allAuthors')
       return Author.find({})
     },
     me: (root, args, context) => {
@@ -128,14 +128,14 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
       return context.currentUser
     }
   },
-  Author: {
-    bookCount: async (root) => {
-      const books = await Book.find({})
-        .populate('author', { name: 1 })
-      // console.log('Author.bookCount')
-      return books.filter(a => a.author.name === root.name).length
-    }
-  },
+  // Author: {
+  //   bookCount: async (root) => {
+  //     const books = await Book.find({})
+  //       .populate('author', { name: 1 })
+  //     // console.log('Author.bookCount')
+  //     return books.filter(a => a.author.name === root.name).length
+  //   }
+  // },
   Mutation: {
     addBook: async (root, args, context) => {
       const currentUser = context.currentUser
@@ -147,7 +147,8 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
       let author = await Author.findOne({ name: args.author })
 
       if (!author) {
-        const newAuthor = new Author({ name: args.author, born: null })
+        // create new record of author if this is a totally new author
+        const newAuthor = new Author({ name: args.author, born: null, bookCount: 1 })
 
         try {
           author = await newAuthor.save()
@@ -155,6 +156,14 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
           throw new UserInputError(error.message, {
             invalidArgs: args,
           })
+        }
+      } else {
+        // update bookCount in database
+        author.bookCount = author.bookCount + 1
+        try {
+          await author.save()
+        } catch (error) {
+          console.log(error.message)
         }
       }
 
@@ -169,10 +178,12 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
       try {
         savedBook = await book.save()
       } catch (error) {
-          throw new UserInputError(error.message, {
-            invalidArgs: args,
-          })
-        }
+        throw new UserInputError(error.message, {
+          invalidArgs: args,
+        })
+
+        // todo: remove previous actions related to author
+      }
       // console.log('savedBook', savedBook)
 
       const final = {
