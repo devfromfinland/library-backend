@@ -1,4 +1,9 @@
-const { ApolloServer, gql, UserInputError, AuthenticationError } = require('apollo-server')
+const { 
+  ApolloServer,
+  gql,
+  UserInputError,
+  AuthenticationError,
+  PubSub } = require('apollo-server')
 const { v4: uuidv4 } = require('uuid')
 const mongoose = require('mongoose')
 const Book = require('./models/book')
@@ -7,9 +12,11 @@ const User = require('./models/user')
 const config = require('./utils/config')
 const book = require('./models/book')
 const jwt = require('jsonwebtoken')
+const { subscribe } = require('graphql')
 
 console.log('Connecting to', config.MONGODB_URI)
 const JWT_SECRET = config.JWT_SECRET
+const pubsub = new PubSub()
 
 mongoose.connect(config.MONGODB_URI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => {
@@ -82,13 +89,25 @@ const typeDefs = gql`
       password: String!
     ): Token
   }
+
+  type Subscription {
+    bookAdded: Book!
+    authorUpdated: Author!
+  }
 `
 
 const resolvers = { //todo: revisit with the updated schema and data saved in database
   Query: {
-    bookCount: () => Book.collection.countDocuments(),
-    authorCount: () => Author.collection.countDocuments(),
+    bookCount: () => {
+      // console.log('bookCount')
+      return Book.collection.countDocuments()
+    },
+    authorCount: () => {
+      // console.log('authorCount')
+      return Author.collection.countDocuments()
+    },
     allBooks: async (root, args) => {
+      // console.log('allBooks')
       const results = await Book.find({})
         .populate('author', { name: 1, born: 1 })
       // console.log('results', results)
@@ -100,11 +119,12 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
         .filter(b => author ? b.author.name === author : b)
     },
     allAuthors: () => {
+      // console.log('allAuthors')
       return Author.find({})
     },
     me: (root, args, context) => {
-      // console.log('i am here')
       // console.log('context', context)
+      // console.log('me')
       return context.currentUser
     }
   },
@@ -112,6 +132,7 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
     bookCount: async (root) => {
       const books = await Book.find({})
         .populate('author', { name: 1 })
+      // console.log('Author.bookCount')
       return books.filter(a => a.author.name === root.name).length
     }
   },
@@ -162,10 +183,13 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
         author: {
           __typename: 'Author',
           name: author.name,
-          born: null
+          born: null,
+          id: author.id
         }
       }
       // console.log('final', final)
+
+      pubsub.publish('BOOK_ADDED', { bookAdded: final })
 
       return final
     },
@@ -190,6 +214,8 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
 
       const updatedAuthor = await author.save()
       // console.log('updatedAuthor', updatedAuthor)
+
+      pubsub.publish('AUTHOR_UPDATED', { authorUpdated: updatedAuthor })
 
       return updatedAuthor
     },
@@ -228,7 +254,15 @@ const resolvers = { //todo: revisit with the updated schema and data saved in da
         user
       }
     }
-  }
+  },
+  Subscription: {
+    bookAdded: {
+      subscribe: () => pubsub.asyncIterator(['BOOK_ADDED'])
+    },
+    authorUpdated: {
+      subscribe: () => pubsub.asyncIterator(['AUTHOR_UPDATED'])
+    },
+  },
 }
 
 const server = new ApolloServer({
@@ -252,6 +286,7 @@ const server = new ApolloServer({
   },
 })
 
-server.listen().then(({ url }) => {
+server.listen().then(({ url, subscriptionsUrl }) => {
   console.log(`Server ready at ${url}`)
+  console.log(`Subscriptions ready at ${subscriptionsUrl}`)
 })
